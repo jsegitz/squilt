@@ -1,0 +1,132 @@
+#!/bin/sh
+
+QUILT_USER_CONFIG="$HOME/.quiltrc"
+QUILT_GLOBAL_CONFIG="/etc/quilt.quiltrc"
+
+if ! which nsjail 2>/dev/null; then
+  echo "you need nsjail (security/nsjail in OBS) for this wrapper to work"
+  exit 1
+fi
+
+mount_dir=$(pwd)
+if [ -L patches ]; then
+  # are we inside the already unpacked dir? If so mount the parent dir so we
+  # have access to the patches
+  mount_dir=$mount_dir/..
+fi
+
+# we need to create a temporary config file since mounts with
+# : don't work on the command line
+TMPFILE=`mktemp -t squilt.nsjail.XXXXXXXXXX` || exit 1
+trap "rm -f -- '$TMPFILE'" EXIT
+
+cat <<END_CONFIG > $TMPFILE
+name: "quilt secure sandbox"
+
+description: "This policy allows to run quilt in a secure way"
+
+time_limit: 120
+
+cwd: "$(pwd)"
+envar: "HOME=$HOME"
+envar: "PATH=$PATH"
+
+mount {
+        src: "$mount_dir"
+        dst: "$mount_dir"
+        rw: true
+        is_bind: true
+}
+mount {
+        src: "/bin"
+        dst: "/bin"
+        rw: false
+        is_bind: true
+}
+mount {
+        src: "/lib"
+        dst: "/lib"
+        rw: false
+        is_bind: true
+}
+mount {
+        src: "/lib64"
+        dst: "/lib64"
+        rw: false
+        is_bind: true
+}
+mount {
+        src: "/usr"
+        dst: "/usr"
+        rw: false
+        is_bind: true
+}
+mount {
+        src: "/sbin"
+        dst: "/sbin"
+        rw: false
+        is_bind: true
+}
+mount {
+        src: "/dev/null"
+        dst: "/dev/null"
+        rw: true
+        is_bind: true
+}
+mount {
+        src: "/etc/alternatives"
+        dst: "/etc/alternatives"
+        rw: false
+        is_bind: true
+}
+mount {
+        dst: "/tmp"
+        fstype: "tmpfs"
+        rw: true
+        is_bind: false
+}
+mount {
+        dst: "/var/tmp"
+        fstype: "tmpfs"
+        rw: true
+        is_bind: false
+}
+mount {
+        dst: "$HOME/rpmbuild"
+        fstype: "tmpfs"
+        rw: true
+        is_bind: false
+}
+
+rlimit_as_type: HARD
+rlimit_core_type: HARD
+rlimit_cpu_type: HARD
+rlimit_fsize_type: HARD
+rlimit_nofile_type: HARD
+rlimit_nproc_type: HARD
+rlimit_stack_type: HARD
+END_CONFIG
+
+if [ -e "$QUILT_USER_CONFIG" ]; then
+  cat <<END_CONFIG >> $TMPFILE
+mount {
+        src: "$QUILT_USER_CONFIG"
+        dst: "$QUILT_USER_CONFIG"
+        rw: false
+        is_bind: true
+}
+END_CONFIG
+fi
+
+if [ -e "$QUILT_GLOBAL_CONFIG" ]; then
+  cat <<END_CONFIG >> $TMPFILE
+mount {
+        src: "$QUILT_GLOBAL_CONFIG"
+        dst: "$QUILT_GLOBAL_CONFIG"
+        rw: false
+        is_bind: true
+}
+END_CONFIG
+fi
+
+nsjail -Mo -q --config $TMPFILE -- /usr/bin/quilt $@
