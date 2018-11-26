@@ -92,6 +92,11 @@ mount {
         rw: false
         is_bind: true
 }
+mount {
+        src: "/etc/rpm"
+        dst: "/etc/rpm"
+        rw: false
+        is_bind: true
 }
 mount {
         dst: "/tmp"
