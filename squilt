@@ -32,12 +32,6 @@ envar: "HOME=$HOME"
 envar: "PATH=$PATH"
 
 mount {
-        src: "$mount_dir"
-        dst: "$mount_dir"
-        rw: true
-        is_bind: true
-}
-mount {
         src: "/bin"
         dst: "/bin"
         rw: false
@@ -109,6 +103,12 @@ mount {
         fstype: "tmpfs"
         rw: true
         is_bind: false
+}
+mount {
+        src: "$mount_dir"
+        dst: "$mount_dir"
+        rw: true
+        is_bind: true
 }
 mount {
         dst: "$HOME/rpmbuild"
