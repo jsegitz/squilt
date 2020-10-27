@@ -87,6 +87,12 @@ mount {
         is_bind: true
 }
 mount {
+        src: "/etc/ld.so.cache"
+        dst: "/etc/ld.so.cache"
+        rw: false
+        is_bind: true
+}
+mount {
         src: "/etc/rpm"
         dst: "/etc/rpm"
         rw: false
