@@ -31,6 +31,7 @@ cwd: "$(pwd)"
 envar: "HOME=$HOME"
 envar: "PATH=$PATH"
 
+# bind for read-only access
 mount {
         src: "/bin"
         dst: "/bin"
@@ -62,18 +63,6 @@ mount {
         is_bind: true
 }
 mount {
-        src: "/dev/null"
-        dst: "/dev/null"
-        rw: true
-        is_bind: true
-}
-mount {
-        src: "/dev/urandom"
-        dst: "/dev/urandom"
-        rw: true
-        is_bind: true
-}
-mount {
         src: "/etc/alternatives"
         dst: "/etc/alternatives"
         rw: false
@@ -98,6 +87,28 @@ mount {
         rw: false
         is_bind: true
 }
+
+# rw access to real files
+mount {
+        src: "$mount_dir"
+        dst: "$mount_dir"
+        rw: true
+        is_bind: true
+}
+mount {
+        src: "/dev/null"
+        dst: "/dev/null"
+        rw: true
+        is_bind: true
+}
+mount {
+        src: "/dev/urandom"
+        dst: "/dev/urandom"
+        rw: true
+        is_bind: true
+}
+
+# fake rw access to tmpfs versions
 mount {
         dst: "/tmp"
         fstype: "tmpfs"
@@ -109,12 +120,6 @@ mount {
         fstype: "tmpfs"
         rw: true
         is_bind: false
-}
-mount {
-        src: "$mount_dir"
-        dst: "$mount_dir"
-        rw: true
-        is_bind: true
 }
 mount {
         dst: "$HOME/rpmbuild"
