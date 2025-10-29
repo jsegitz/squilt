@@ -1,5 +1,7 @@
 # squilt
-Wrapper to confine quilt with [nsjail](https://github.com/google/nsjail)
+Wrapper to confine quilt with [bubblewrap](https://github.com/containers/bubblewrap)
+
+Previous versions used [nsjail](https://github.com/google/nsjail).
 
 # Why?
 Using quilt on untrusted spec files is not secure. For more see

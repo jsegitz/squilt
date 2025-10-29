@@ -1,162 +1,49 @@
 #!/bin/sh
 
-QUILT_USER_CONFIG="$HOME/.quiltrc"
-QUILT_GLOBAL_CONFIG="/etc/quilt.quiltrc"
+# Start with the base bwrap arguments in an array
+bwrap_args=(
+  --symlink usr/bin /bin
+  --symlink usr/lib /lib
+  --symlink usr/lib64 /lib64
+  --ro-bind /usr /usr
+  --proc /proc
+  --dev /dev
+  --tmpfs /tmp
+  --dir /var
+  --tmpfs /var/tmp
+  --tmpfs "$HOME/rpmbuild"
+  --unshare-all
+  --share-net
+  --die-with-parent
+)
 
-if ! which nsjail 2>/dev/null; then
-  echo "you need nsjail (security/nsjail in OBS) for this wrapper to work"
-  exit 1
+# Handle the system-wide config
+if [[ -f "/etc/quilt.quiltrc" ]]; then
+  bwrap_args+=(--dir /etc)
+  bwrap_args+=(--ro-bind /etc/quilt.quiltrc /etc/quilt.quiltrc)
 fi
 
-mount_dir=$(pwd)
-if [ -L patches ]; then
-  # are we inside the already unpacked dir? If so mount the parent dir so we
-  # have access to the patches
-  mount_dir=$mount_dir/..
+# Handle the user-specific config
+if [[ -f "$HOME/.quiltrc" ]]; then
+  bwrap_args+=(--dir "$HOME")
+  bwrap_args+=(--ro-bind "$HOME/.quiltrc" "$HOME/.quiltrc")
 fi
 
-# we need to create a temporary config file since mounts with
-# : don't work on the command line
-TMPFILE=`mktemp -t squilt.nsjail.XXXXXXXXXX` || exit 1
-trap "rm -f -- '$TMPFILE'" EXIT
+# Add the writable current directory
+bwrap_args+=(--dir "$PWD")
+bwrap_args+=(--bind "$PWD" "$PWD")
 
-cat <<END_CONFIG > $TMPFILE
-name: "quilt secure sandbox"
-
-description: "This policy allows to run quilt in a secure way"
-
-time_limit: 120
-
-cwd: "$(pwd)"
-envar: "HOME=$HOME"
-envar: "PATH=$PATH"
-
-# bind for read-only access
-mount {
-        src: "/bin"
-        dst: "/bin"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/lib"
-        dst: "/lib"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/lib64"
-        dst: "/lib64"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/usr"
-        dst: "/usr"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/sbin"
-        dst: "/sbin"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/etc/alternatives"
-        dst: "/etc/alternatives"
-        rw: false
-        is_bind: true
-        mandatory: false
-}
-mount {
-        src: "/etc/nsswitch.conf"
-        dst: "/etc/nsswitch.conf"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/etc/ld.so.cache"
-        dst: "/etc/ld.so.cache"
-        rw: false
-        is_bind: true
-}
-mount {
-        src: "/etc/rpm"
-        dst: "/etc/rpm"
-        rw: false
-        is_bind: true
-}
-
-# rw access to real files
-mount {
-        src: "$mount_dir"
-        dst: "$mount_dir"
-        rw: true
-        is_bind: true
-}
-mount {
-        src: "/dev/null"
-        dst: "/dev/null"
-        rw: true
-        is_bind: true
-}
-mount {
-        src: "/dev/urandom"
-        dst: "/dev/urandom"
-        rw: true
-        is_bind: true
-}
-
-# fake rw access to tmpfs versions
-mount {
-        dst: "/tmp"
-        fstype: "tmpfs"
-        rw: true
-        is_bind: false
-}
-mount {
-        dst: "/var/tmp"
-        fstype: "tmpfs"
-        rw: true
-        is_bind: false
-}
-mount {
-        dst: "$HOME/rpmbuild"
-        fstype: "tmpfs"
-        rw: true
-        is_bind: false
-}
-
-rlimit_as_type: HARD
-rlimit_core_type: HARD
-rlimit_cpu_type: HARD
-rlimit_fsize_type: HARD
-rlimit_nofile_type: HARD
-rlimit_nproc_type: HARD
-rlimit_stack_type: HARD
-END_CONFIG
-
-if [ -e "$QUILT_USER_CONFIG" ]; then
-  cat <<END_CONFIG >> $TMPFILE
-mount {
-        src: "$QUILT_USER_CONFIG"
-        dst: "$QUILT_USER_CONFIG"
-        rw: false
-        is_bind: true
-}
-END_CONFIG
+# Check if we're in a source directory with a patches symlink and make that
+# writeable as well
+if [ "$(readlink patches)" = "../.." ]; then
+  MAIN_SOURCE_DIR=$(realpath "$PWD/../../")
+  bwrap_args+=(--dir "$MAIN_SOURCE_DIR")
+  bwrap_args+=(--bind "$MAIN_SOURCE_DIR" "$MAIN_SOURCE_DIR")
 fi
 
-if [ -e "$QUILT_GLOBAL_CONFIG" ]; then
-  cat <<END_CONFIG >> $TMPFILE
-mount {
-        src: "$QUILT_GLOBAL_CONFIG"
-        dst: "$QUILT_GLOBAL_CONFIG"
-        rw: false
-        is_bind: true
-}
-END_CONFIG
-fi
+# The command to run
+bwrap_args+=(/usr/bin/quilt "$@")
 
-nsjail -Mo -q --config $TMPFILE -- /usr/bin/quilt $@
+# Execute the final command
+bwrap "${bwrap_args[@]}"
+
